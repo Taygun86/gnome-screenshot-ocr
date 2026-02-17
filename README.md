@@ -3,6 +3,8 @@
 
 A Gnome Shell extension that passes screenshots through an OCR engine and places the text on the clipboard. 
 
+<img width="529" height="378" alt="bitmap" src="https://github.com/user-attachments/assets/b83c3c6e-142f-4918-8b39-2212ba736c54" />
+
 # Usage
 
 To use, simply use the print screen key (or whatever shortcut currently takes screenshots). 
@@ -14,3 +16,4 @@ The screenshot will be saved as usual to both a *.png file and to the clipboard,
 Requires tesseract, which may be installed via `sudo apt install tesseract-ocr libtesseract-dev`
 
 May be installed by running `gnome-extensions install --force screenshot-ocr.zip`
+
