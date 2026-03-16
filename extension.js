@@ -8,29 +8,14 @@ export default class OcrScreenshotExtension extends Extension {
     enable() {
         this._signalId = 0;
         this._ocrCancellable = null;
-        this._openOverride = false;
-        this._originalOpen = null;
 
-        // 1. Try to connect if UI already exists
+        // In GNOME 49, the screenshot UI is already available, so we connect directly.
+        // Removed the legacy monkey-patching of Main.openScreenshotUI which causes read-only TypeError.
         if (Main.screenshotUI) {
             this._connectSignal();
-        } 
-        
-        // 2. Monkey-patch the opener to catch lazy-loading
-        // We do this regardless of step 1 to ensure re-connections if the UI is destroyed/recreated
-        this._originalOpen = Main.openScreenshotUI;
-        this._myOpenWrapper = (...args) => {
-            // Call original
-            this._originalOpen.call(Main, ...args);
-            
-            // Connect signal if not already connected
-            if (Main.screenshotUI && !this._signalId) {
-                this._connectSignal();
-            }
-        };
-
-        Main.openScreenshotUI = this._myOpenWrapper;
-        this._openOverride = true;
+        } else {
+            console.error(`[${this.metadata.uuid}] Main.screenshotUI is not ready yet.`);
+        }
     }
 
     _connectSignal() {
@@ -52,8 +37,9 @@ export default class OcrScreenshotExtension extends Extension {
             }
             this._ocrCancellable = new Gio.Cancellable();
 
+            // Added Turkish and English language support (-l tur+eng)
             let proc = new Gio.Subprocess({
-                argv: ['tesseract', filePath, 'stdout'],
+                argv: ['tesseract', filePath, 'stdout', '-l', 'tur+eng'],
                 flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             });
 
@@ -101,21 +87,6 @@ export default class OcrScreenshotExtension extends Extension {
         if (Main.screenshotUI && this._signalId) {
             Main.screenshotUI.disconnect(this._signalId);
             this._signalId = 0;
-        }
-
-        // 3. Restore Main.openScreenshotUI safely
-        if (this._openOverride) {
-            // Only restore if the current function is strictly OUR wrapper.
-            // If someone else patched it after us, restoring ours would break theirs.
-            if (Main.openScreenshotUI === this._myOpenWrapper) {
-                Main.openScreenshotUI = this._originalOpen;
-            } else {
-                console.warn(`[${this.metadata.uuid}] Main.openScreenshotUI was modified by another extension; skipping restore.`);
-            }
-            
-            this._originalOpen = null;
-            this._myOpenWrapper = null;
-            this._openOverride = false;
         }
     }
 }
