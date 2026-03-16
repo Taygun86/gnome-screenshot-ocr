@@ -1,45 +1,158 @@
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import St from 'gi://St';
+import Clutter from 'gi://Clutter';
 import { Extension, gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import { ScreenshotUI } from 'resource:///org/gnome/shell/ui/screenshot.js';
 
 export default class OcrScreenshotExtension extends Extension {
     enable() {
         this._signalId = 0;
         this._ocrCancellable = null;
+        this._openOverride = false;
+        this._originalOpen = null;
 
-        // In GNOME 49, the screenshot UI is already available, so we connect directly.
-        // Removed the legacy monkey-patching of Main.openScreenshotUI which causes read-only TypeError.
         if (Main.screenshotUI) {
-            this._connectSignal();
-        } else {
-            console.error(`[${this.metadata.uuid}] Main.screenshotUI is not ready yet.`);
+            this._patchScreenshotUI(Main.screenshotUI);
+        } 
+        
+        this._originalOpen = ScreenshotUI.prototype.open;
+        let self = this;
+        this._myOpenWrapper = async function(...args) {
+            let result = await self._originalOpen.call(this, ...args);
+            self._patchScreenshotUI(this);
+            return result;
+        };
+
+        ScreenshotUI.prototype.open = this._myOpenWrapper;
+        this._openOverride = true;
+    }
+
+    _patchScreenshotUI(ui) {
+        // 1. Signal triggered when a screenshot is taken
+        if (!this._signalId) {
+            console.debug(`[${this.metadata.uuid}] Connecting to screenshot-taken signal`);
+            this._signalId = ui.connect('screenshot-taken', (_ui, file) => {
+                let isOcrCapture = ui._isOcrCapture; // Custom mode flag
+                ui._isOcrCapture = false; // Reset to default
+
+                if (file && isOcrCapture) {
+                    // Process the screenshot file and delete it afterwards
+                    this._runTesseract(file.get_path(), true);
+                }
+            });
+        }
+
+        // 2. Create and position the button only once
+        if (!ui._ocrButton) {
+            ui._ocrButton = new St.Button({
+                style_class: 'screenshot-ui-shot-cast-button', 
+                icon_name: 'edit-select-text-symbolic',
+                x_align: Clutter.ActorAlign.START,
+                y_align: Clutter.ActorAlign.CENTER,
+                toggle_mode: true,
+            });
+
+            // Simulate OCR as a third option by managing active states
+            ui._ocrButton.connect('clicked', () => {
+                if (ui._ocrButton.checked) {
+                    ui._isOcrModeActive = true;
+                    // Visually disable the default shot button while keeping it functional for GNOME
+                    if (ui._shotButton) {
+                        ui._shotButton.toggle_mode = true;
+                        ui._shotButton.remove_style_pseudo_class('checked');
+                    }
+                    if (ui._castButton) {
+                        ui._castButton.toggle_mode = true;
+                        ui._castButton.checked = false;
+                    }
+                } else {
+                    // Revert to Photo mode if turned off
+                    ui._isOcrModeActive = false;
+                    if (ui._shotButton) {
+                        ui._shotButton.checked = true;
+                        ui._shotButton.add_style_pseudo_class('checked');
+                    }
+                }
+            });
+
+            // Disable OCR mode when Camera or Video modes are explicitly selected
+            if (ui._shotButton) {
+                ui._shotButton.connect('notify::checked', () => {
+                   if (ui._shotButton.checked) {
+                       ui._ocrButton.checked = false;
+                       ui._isOcrModeActive = false;
+                       ui._shotButton.add_style_pseudo_class('checked');
+                   }
+                });
+            }
+            if (ui._castButton) {
+                ui._castButton.connect('notify::checked', () => {
+                   if (ui._castButton.checked) {
+                       ui._ocrButton.checked = false;
+                       ui._isOcrModeActive = false;
+                   }
+                });
+            }
+
+            // Add the OCR button to the toggle container
+            if (ui._shotCastContainer) {
+                ui._shotCastContainer.add_child(ui._ocrButton);
+            } else if (ui._captureButton) {
+                let container = ui._captureButton.get_parent();
+                if (container) {
+                    container.add_child(ui._ocrButton);
+                }
+            } else {
+                console.warn(`[${this.metadata.uuid}] ui._captureButton not found!`);
+            }
+
+            // Override the main capture button click to intercept OCR requests
+            if (!ui._ocrCaptureConnected && ui._captureButton) {
+                ui._originalCaptureClicked = ui._onCaptureButtonClicked;
+                ui._onCaptureButtonClicked = async function() {
+                    if (ui._isOcrModeActive) {
+                        ui._isOcrCapture = true; 
+                        // Trick GNOME into allowing the capture
+                        ui._shotButton.checked = true;
+                    }
+                    return await ui._originalCaptureClicked.call(this);
+                };
+                ui._ocrCaptureConnected = true;
+            }
+
+            // Restrict visibility strictly to the Area Selection panel
+            let updateVisibility = () => {
+                if (ui._selectionButton) {
+                    let isSelection = ui._selectionButton.checked;
+                    ui._ocrButton.visible = isSelection;
+                    
+                    if (!isSelection) {
+                        ui._ocrButton.checked = false;
+                        if (ui._shotButton) ui._shotButton.checked = true;
+                    }
+                }
+            };
+
+            if (ui._selectionButton) {
+                ui._selectionButton.connect('notify::checked', updateVisibility);
+                updateVisibility();
+            } else {
+                 console.warn(`[${this.metadata.uuid}] ui._selectionButton not found!`);
+            }
         }
     }
 
-    _connectSignal() {
-        if (this._signalId) return;
-
-        console.debug(`[${this.metadata.uuid}] Connecting to screenshot-taken signal`);
-        this._signalId = Main.screenshotUI.connect('screenshot-taken', (ui, file) => {
-            if (file) {
-                this._runTesseract(file.get_path());
-            }
-        });
-    }
-
-    _runTesseract(filePath) {
+    _runTesseract(filePath, shouldDelete = false) {
         try {
-            // Cancel any previous running OCR tasks to prevent overlap
             if (this._ocrCancellable) {
                 this._ocrCancellable.cancel();
             }
             this._ocrCancellable = new Gio.Cancellable();
 
-            // Added Turkish and English language support (-l tur+eng)
             let proc = new Gio.Subprocess({
-                argv: ['tesseract', filePath, 'stdout', '-l', 'tur+eng'],
+                argv: ['tesseract', filePath, 'stdout'],
                 flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             });
 
@@ -55,7 +168,6 @@ export default class OcrScreenshotExtension extends Extension {
                             this._copyToClipboard(text);
                         } 
                     } else {
-                        // Only log real errors, not cancellations
                         if (!stderr.includes('Interrupted system call')) {
                             console.debug(`[${this.metadata.uuid}] Tesseract stderr: ${stderr}`);
                         }
@@ -63,6 +175,18 @@ export default class OcrScreenshotExtension extends Extension {
                 } catch (e) {
                     if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
                         console.error(`[${this.metadata.uuid}] Tesseract failed: ${e.message}`);
+                    }
+                } finally {
+                    // Delete the temporary screenshot file if OCR mode was used
+                    if (shouldDelete) {
+                        try {
+                            let file = Gio.File.new_for_path(filePath);
+                            if (file.query_exists(null)) {
+                                file.delete(null);
+                            }
+                        } catch (err) {
+                            console.warn(`[${this.metadata.uuid}] Failed to delete temp file: ${err.message}`);
+                        }
                     }
                 }
             });
@@ -77,16 +201,34 @@ export default class OcrScreenshotExtension extends Extension {
     }
 
     disable() {
-        // 1. Cancel any running OCR process
         if (this._ocrCancellable) {
             this._ocrCancellable.cancel();
             this._ocrCancellable = null;
         }
 
-        // 2. Disconnect signal
-        if (Main.screenshotUI && this._signalId) {
-            Main.screenshotUI.disconnect(this._signalId);
-            this._signalId = 0;
+        if (Main.screenshotUI) {
+            if (this._signalId) {
+                Main.screenshotUI.disconnect(this._signalId);
+                this._signalId = 0;
+            }
+            
+            // Remove the added button
+            if (Main.screenshotUI._ocrButton) {
+                Main.screenshotUI._ocrButton.destroy();
+                Main.screenshotUI._ocrButton = null;
+            }
+        }
+
+        if (this._openOverride) {
+            if (ScreenshotUI.prototype.open === this._myOpenWrapper) {
+                ScreenshotUI.prototype.open = this._originalOpen;
+            } else {
+                console.warn(`[${this.metadata.uuid}] ScreenshotUI.prototype.open was modified by another extension; skipping restore.`);
+            }
+            
+            this._originalOpen = null;
+            this._myOpenWrapper = null;
+            this._openOverride = false;
         }
     }
 }
