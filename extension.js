@@ -144,6 +144,24 @@ export default class OcrScreenshotExtension extends Extension {
         }
     }
 
+    _getInstalledLangs() {
+        try {
+            let [ok, stdout, stderr] = GLib.spawn_command_line_sync('tesseract --list-langs');
+            if (ok && stdout) {
+                let output = new TextDecoder().decode(stdout);
+                let lines = output.split('\n');
+                let langs = lines.slice(1)
+                                 .map(l => l.trim())
+                                 .filter(l => l && l !== 'osd');
+                
+                return langs.join('+');
+            }
+        } catch (e) {
+            console.error(`[${this.metadata.uuid}] Failed to get langs: ${e.message}`);
+        }
+        return 'eng';
+    }
+
     _runTesseract(filePath, shouldDelete = false) {
         try {
             if (this._ocrCancellable) {
@@ -151,8 +169,10 @@ export default class OcrScreenshotExtension extends Extension {
             }
             this._ocrCancellable = new Gio.Cancellable();
 
+            let allLangs = this._getInstalledLangs();
+
             let proc = new Gio.Subprocess({
-                argv: ['tesseract', filePath, 'stdout'],
+                argv: ['tesseract', filePath, 'stdout', '-l', allLangs],
                 flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             });
 
