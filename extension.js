@@ -55,7 +55,7 @@ export default class OcrScreenshotExtension extends Extension {
             });
 
             // Simulate OCR as a third option by managing active states
-            ui._ocrButton.connect('clicked', () => {
+            ui._ocrButton.connect('notify::checked', () => {
                 if (ui._ocrButton.checked) {
                     ui._isOcrModeActive = true;
                     // Visually disable the default shot button while keeping it functional for GNOME
@@ -112,10 +112,13 @@ export default class OcrScreenshotExtension extends Extension {
             if (!ui._ocrCaptureConnected && ui._captureButton) {
                 ui._originalCaptureClicked = ui._onCaptureButtonClicked;
                 ui._onCaptureButtonClicked = async function() {
-                    if (ui._isOcrModeActive) {
+                    let isSelectionMode = ui._selectionButton && ui._selectionButton.checked;
+                    if (ui._isOcrModeActive && isSelectionMode) {
                         ui._isOcrCapture = true; 
                         // Trick GNOME into allowing the capture
                         ui._shotButton.checked = true;
+                    } else {
+                        ui._isOcrCapture = false;
                     }
                     return await ui._originalCaptureClicked.call(this);
                 };
@@ -129,8 +132,12 @@ export default class OcrScreenshotExtension extends Extension {
                     ui._ocrButton.visible = isSelection;
                     
                     if (!isSelection) {
+                        ui._isOcrModeActive = false;
                         ui._ocrButton.checked = false;
-                        if (ui._shotButton) ui._shotButton.checked = true;
+                        if (ui._shotButton) {
+                            ui._shotButton.checked = true;
+                            ui._shotButton.add_style_pseudo_class('checked');
+                        }
                     }
                 }
             };
@@ -145,6 +152,14 @@ export default class OcrScreenshotExtension extends Extension {
     }
 
     _getInstalledLangs() {
+        let settings = this.getSettings();
+        let userVal = settings.get_user_value('languages');
+        
+        if (userVal !== null) {
+            return settings.get_string('languages');
+        }
+
+        // Fallback options if no settings saved yet:
         try {
             let [ok, stdout, stderr] = GLib.spawn_command_line_sync('tesseract --list-langs');
             if (ok && stdout) {
@@ -154,6 +169,12 @@ export default class OcrScreenshotExtension extends Extension {
                                  .map(l => l.trim())
                                  .filter(l => l && l !== 'osd');
                 
+                let engIndex = langs.indexOf('eng');
+                if (engIndex !== -1) {
+                    langs.splice(engIndex, 1);
+                    langs.push('eng');
+                }
+
                 return langs.join('+');
             }
         } catch (e) {
@@ -171,8 +192,13 @@ export default class OcrScreenshotExtension extends Extension {
 
             let allLangs = this._getInstalledLangs();
 
+            let argv = ['tesseract', filePath, 'stdout'];
+            if (allLangs) {
+                argv.push('-l', allLangs);
+            }
+
             let proc = new Gio.Subprocess({
-                argv: ['tesseract', filePath, 'stdout', '-l', allLangs],
+                argv: argv,
                 flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE
             });
 
