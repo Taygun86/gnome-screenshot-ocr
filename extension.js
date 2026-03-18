@@ -46,6 +46,14 @@ export default class OcrScreenshotExtension extends Extension {
 
         // 2. Create and position the button only once
         if (!ui._ocrButton) {
+            if (ui._panel) {
+                ui._panel.set_style('padding: 10px; min-width: 0px; width: 330px;');
+            }
+
+            if (ui._shotCastContainer) {
+                ui._shotCastContainer.set_style('spacing: 2px;');
+            }
+
             ui._ocrButton = new St.Button({
                 style_class: 'screenshot-ui-shot-cast-button', 
                 icon_name: 'edit-select-text-symbolic',
@@ -54,46 +62,67 @@ export default class OcrScreenshotExtension extends Extension {
                 toggle_mode: true,
             });
 
-            // Simulate OCR as a third option by managing active states
-            ui._ocrButton.connect('notify::checked', () => {
-                if (ui._ocrButton.checked) {
-                    ui._isOcrModeActive = true;
-                    // Visually disable the default shot button while keeping it functional for GNOME
-                    if (ui._shotButton) {
-                        ui._shotButton.toggle_mode = true;
-                        ui._shotButton.remove_style_pseudo_class('checked');
-                    }
-                    if (ui._castButton) {
-                        ui._castButton.toggle_mode = true;
-                        ui._castButton.checked = false;
-                    }
-                } else {
-                    // Revert to Photo mode if turned off
-                    ui._isOcrModeActive = false;
-                    if (ui._shotButton) {
-                        ui._shotButton.checked = true;
-                        ui._shotButton.add_style_pseudo_class('checked');
+            ui._updatingModes = false;
+
+            let updateVisuals = () => {
+                if (ui._ocrButton) {
+                    if (ui._isOcrModeActive) {
+                        ui._ocrButton.add_style_pseudo_class('checked');
+                    } else {
+                        ui._ocrButton.remove_style_pseudo_class('checked');
                     }
                 }
-            });
+                if (ui._shotButton) {
+                    if (!ui._isOcrModeActive && ui._shotButton.checked) {
+                        ui._shotButton.add_style_pseudo_class('checked');
+                    } else {
+                        ui._shotButton.remove_style_pseudo_class('checked');
+                    }
+                }
+                if (ui._castButton) {
+                    if (!ui._isOcrModeActive && ui._castButton.checked) {
+                        ui._castButton.add_style_pseudo_class('checked');
+                    } else {
+                        ui._castButton.remove_style_pseudo_class('checked');
+                    }
+                }
+            };
+
+            let setMode = (mode) => {
+                if (ui._updatingModes) return;
+                ui._updatingModes = true;
+
+                if (mode === 'ocr') {
+                    ui._isOcrModeActive = true;
+                    if (ui._shotButton) ui._shotButton.checked = false;
+                    if (ui._castButton) ui._castButton.checked = false;
+                    ui._ocrButton.checked = true;
+                } else if (mode === 'shot') {
+                    ui._isOcrModeActive = false;
+                    ui._ocrButton.checked = false;
+                    if (ui._castButton) ui._castButton.checked = false;
+                    if (ui._shotButton) ui._shotButton.checked = true;
+                } else if (mode === 'cast') {
+                    ui._isOcrModeActive = false;
+                    ui._ocrButton.checked = false;
+                    if (ui._shotButton) ui._shotButton.checked = false;
+                    if (ui._castButton) ui._castButton.checked = true;
+                }
+                
+                updateVisuals();
+                ui._updatingModes = false;
+            };
+
+            ui._ocrButton.connect('clicked', () => setMode('ocr'));
 
             // Disable OCR mode when Camera or Video modes are explicitly selected
             if (ui._shotButton) {
-                ui._shotButton.connect('notify::checked', () => {
-                   if (ui._shotButton.checked) {
-                       ui._ocrButton.checked = false;
-                       ui._isOcrModeActive = false;
-                       ui._shotButton.add_style_pseudo_class('checked');
-                   }
-                });
+                ui._shotButton.connect('clicked', () => setMode('shot'));
+                ui._shotButton.connect('notify::checked', updateVisuals); // GNOME overrides check
             }
             if (ui._castButton) {
-                ui._castButton.connect('notify::checked', () => {
-                   if (ui._castButton.checked) {
-                       ui._ocrButton.checked = false;
-                       ui._isOcrModeActive = false;
-                   }
-                });
+                ui._castButton.connect('clicked', () => setMode('cast'));
+                ui._castButton.connect('notify::checked', updateVisuals); // GNOME overrides check
             }
 
             // Add the OCR button to the toggle container
