@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.screenshot-ocr" path="/org/gnome/shell/extensions/screenshot-ocr/">
+    <key name="languages" type="s">
+      <default>""</default>
+      <summary>Selected OCR languages</summary>
+      <description>Plus separated list of languages for Tesseract (e.g. tur+eng). Empty means auto.</description>
+    </key>
+  </schema>
+</schemalist>

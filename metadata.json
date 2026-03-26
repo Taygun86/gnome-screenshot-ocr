@@ -3,5 +3,6 @@
     "name": "Screenshot OCR",
     "description": "Run OCR on screenshots and copy text to clipboard",
     "shell-version": [ "49" ],
+    "settings-schema": "org.gnome.shell.extensions.screenshot-ocr",
     "url": "https://github.com/nbubis/gnome-screenshot-ocr"
 }
