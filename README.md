@@ -3,13 +3,18 @@
 
 A Gnome Shell extension that passes screenshots through an OCR engine and places the text on the clipboard. 
 
-<img width="529" height="378" alt="bitmap" src="https://github.com/user-attachments/assets/b83c3c6e-142f-4918-8b39-2212ba736c54" />
 
 # Usage
 
 To use, simply use the print screen key (or whatever shortcut currently takes screenshots). 
 
-The screenshot will be saved as usual to both a *.png file and to the clipboard, but additionaly, any text appearing in the image and detected by the OCR will be copied onto the clipboard as well.
+<img width="431" height="235" alt="image" src="https://github.com/user-attachments/assets/596cf1d9-6407-455c-b3b8-d4b41df9a9d0" />
+
+Select the "<>" icon, and any text appearing in the image and detected by the OCR will be copied onto the clipboard.
+
+To disable / enable languages and determine their OCR priority, you can edit the settings using the extension manager.
+
+<img width="690" height="626" alt="image" src="https://github.com/user-attachments/assets/e12e609b-f80d-4fa6-985a-30ed2196227b" />
 
 # Installation
 
