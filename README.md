@@ -1,5 +1,5 @@
 
-# gnome-screenshot-ocr
+# Tesseract OCR
 
 A Gnome Shell extension that passes screenshots through an OCR engine and places the text on the clipboard. 
 
@@ -20,5 +20,5 @@ To disable / enable languages and determine their OCR priority, you can edit the
 
 Requires tesseract, which may be installed via `sudo apt install tesseract-ocr libtesseract-dev`
 
-May be installed by running `gnome-extensions install --force screenshot-ocr.zip`
+May be installed by running `gnome-extensions install --force tesseract-ocr.zip`
 

@@ -1,8 +1,5 @@
-# Zip archives and packages
 *.zip
 *.shell-extension.zip
-
-# OS and IDE files
 .DS_Store
 Thumbs.db
 *.swp

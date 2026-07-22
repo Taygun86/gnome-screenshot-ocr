@@ -1,6 +1,6 @@
 {
     "uuid": "screenshot-ocr@taygun86",
-    "name": "Screenshot OCR",
+    "name": "Tesseract OCR",
     "description": "Run OCR on screenshots and copy text to clipboard",
     "shell-version": [
         "49",
