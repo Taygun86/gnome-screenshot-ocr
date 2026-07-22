@@ -15,11 +15,11 @@ export default class OcrScreenshotExtension extends Extension {
 
         if (Main.screenshotUI) {
             this._patchScreenshotUI(Main.screenshotUI);
-        } 
-        
+        }
+
         this._originalOpen = ScreenshotUI.prototype.open;
         let self = this;
-        this._myOpenWrapper = async function(...args) {
+        this._myOpenWrapper = async function (...args) {
             let result = await self._originalOpen.call(this, ...args);
             self._patchScreenshotUI(this);
             return result;
@@ -55,7 +55,7 @@ export default class OcrScreenshotExtension extends Extension {
             }
 
             ui._ocrButton = new St.Button({
-                style_class: 'screenshot-ui-shot-cast-button', 
+                style_class: 'screenshot-ui-shot-cast-button',
                 icon_name: 'edit-select-text-symbolic',
                 x_align: Clutter.ActorAlign.START,
                 y_align: Clutter.ActorAlign.CENTER,
@@ -108,7 +108,7 @@ export default class OcrScreenshotExtension extends Extension {
                     if (ui._shotButton) ui._shotButton.checked = false;
                     if (ui._castButton) ui._castButton.checked = true;
                 }
-                
+
                 updateVisuals();
                 ui._updatingModes = false;
             };
@@ -140,10 +140,10 @@ export default class OcrScreenshotExtension extends Extension {
             // Override the main capture button click to intercept OCR requests
             if (!ui._ocrCaptureConnected && ui._captureButton) {
                 ui._originalCaptureClicked = ui._onCaptureButtonClicked;
-                ui._onCaptureButtonClicked = async function() {
+                ui._onCaptureButtonClicked = async function () {
                     let isSelectionMode = ui._selectionButton && ui._selectionButton.checked;
                     if (ui._isOcrModeActive && isSelectionMode) {
-                        ui._isOcrCapture = true; 
+                        ui._isOcrCapture = true;
                         // Trick GNOME into allowing the capture
                         ui._shotButton.checked = true;
                     } else {
@@ -159,7 +159,7 @@ export default class OcrScreenshotExtension extends Extension {
                 if (ui._selectionButton) {
                     let isSelection = ui._selectionButton.checked;
                     ui._ocrButton.visible = isSelection;
-                    
+
                     if (!isSelection) {
                         ui._isOcrModeActive = false;
                         ui._ocrButton.checked = false;
@@ -175,7 +175,7 @@ export default class OcrScreenshotExtension extends Extension {
                 ui._selectionButton.connect('notify::checked', updateVisibility);
                 updateVisibility();
             } else {
-                 console.warn(`[${this.metadata.uuid}] ui._selectionButton not found!`);
+                console.warn(`[${this.metadata.uuid}] ui._selectionButton not found!`);
             }
         }
     }
@@ -183,7 +183,7 @@ export default class OcrScreenshotExtension extends Extension {
     _getInstalledLangs() {
         let settings = this.getSettings();
         let userVal = settings.get_user_value('languages');
-        
+
         if (userVal !== null) {
             return settings.get_string('languages');
         }
@@ -195,9 +195,9 @@ export default class OcrScreenshotExtension extends Extension {
                 let output = new TextDecoder().decode(stdout);
                 let lines = output.split('\n');
                 let langs = lines.slice(1)
-                                 .map(l => l.trim())
-                                 .filter(l => l && l !== 'osd');
-                
+                    .map(l => l.trim())
+                    .filter(l => l && l !== 'osd');
+
                 let engIndex = langs.indexOf('eng');
                 if (engIndex !== -1) {
                     langs.splice(engIndex, 1);
@@ -241,7 +241,7 @@ export default class OcrScreenshotExtension extends Extension {
                         let text = stdout.trim();
                         if (text) {
                             this._copyToClipboard(text);
-                        } 
+                        }
                     } else {
                         if (!stderr.includes('Interrupted system call')) {
                             console.debug(`[${this.metadata.uuid}] Tesseract stderr: ${stderr}`);
@@ -286,7 +286,7 @@ export default class OcrScreenshotExtension extends Extension {
                 Main.screenshotUI.disconnect(this._signalId);
                 this._signalId = 0;
             }
-            
+
             // Remove the added button
             if (Main.screenshotUI._ocrButton) {
                 Main.screenshotUI._ocrButton.destroy();
@@ -300,7 +300,7 @@ export default class OcrScreenshotExtension extends Extension {
             } else {
                 console.warn(`[${this.metadata.uuid}] ScreenshotUI.prototype.open was modified by another extension; skipping restore.`);
             }
-            
+
             this._originalOpen = null;
             this._myOpenWrapper = null;
             this._openOverride = false;
